@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recamly 진본 확인</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --text: #1d1d1b; --dim: #6b6b66; --line: #e3e3de;
+    --ok: #1f8a4c; --ok-bg: #e7f5ec; --bad: #c4362f; --bad-bg: #fbe9e7;
+    --warn: #9a6b00; --warn-bg: #fdf3dc; --none-bg: #eeeeea; --accent: #1f2a44;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141413; --card: #1e1e1c; --text: #f0f0ec; --dim: #a3a39c; --line: #33332f;
+      --ok: #5fd08e; --ok-bg: #16301f; --bad: #ff7b72; --bad-bg: #3a1a18;
+      --warn: #f2c14e; --warn-bg: #3a2f12; --none-bg: #2a2a27; --accent: #f7b733;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--dim); margin: 0 0 24px; }
+  #drop {
+    display: block; border: 2px dashed var(--line); border-radius: 16px; background: var(--card);
+    padding: 36px 16px; text-align: center; cursor: pointer;
+  }
+  #drop.over { border-color: var(--accent); }
+  #drop strong { display: block; font-size: 18px; margin-bottom: 4px; }
+  #drop span { color: var(--dim); font-size: 14px; }
+  input[type=file] { display: none; }
+  .privacy { color: var(--dim); font-size: 13px; margin: 10px 2px 0; }
+  #result { margin-top: 24px; }
+  .verdict { border-radius: 16px; padding: 18px 18px; margin-bottom: 14px; }
+  .verdict h2 { margin: 0 0 4px; font-size: 20px; }
+  .verdict p { margin: 0; }
+  .original { background: var(--ok-bg); color: var(--ok); }
+  .modified { background: var(--bad-bg); color: var(--bad); }
+  .unknown { background: var(--warn-bg); color: var(--warn); }
+  .none { background: var(--none-bg); color: var(--text); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 6px 16px; margin-bottom: 14px; }
+  .check { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .check:last-child { border-bottom: 0; }
+  .mark { flex: none; width: 22px; text-align: center; font-weight: 700; }
+  .yes { color: var(--ok); } .no { color: var(--bad); } .maybe { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 0; border-bottom: 1px solid var(--line); }
+  tr:last-child th, tr:last-child td { border-bottom: 0; }
+  th { width: 34%; color: var(--dim); font-weight: 500; padding-right: 10px; }
+  td { word-break: break-all; }
+  a { color: inherit; }
+  .busy { color: var(--dim); }
+  footer { color: var(--dim); font-size: 13px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Recamly 진본 확인</h1>
+  <p class="sub">Recamly Stamp로 찍은 사진·영상이 원본 그대로인지 확인해요.</p>
+
+  <label id="drop">
+    <strong>파일을 여기에 끌어다 놓거나 눌러서 고르세요</strong>
+    <span>사진(JPG) · 영상(MP4)</span>
+    <input id="file" type="file" accept="image/jpeg,video/mp4">
+  </label>
+  <p class="privacy">파일은 어디에도 올라가지 않아요. 이 브라우저 안에서만 확인해요.</p>
+
+  <div id="result"></div>
+
+  <footer>
+    확인 방식: 촬영한 폰의 보안 칩(안드로이드 키스토어) 서명, 구글 키 증명서, 공공 시간 증명(RFC 3161).
+    카카오톡 등으로 압축해서 보낸 파일은 원본과 달라져 확인되지 않아요. "파일로 보내기"로 받은 원본을 올려 주세요.
+    이 결과는 기술적인 확인이며, 법적 증거 채택 여부는 각 기관이 판단해요.
+  </footer>
+</main>
+
+<script type="module">
+  import { verify, fmtTime } from './verify.js';
+
+  const drop = document.getElementById('drop');
+  const input = document.getElementById('file');
+  const out = document.getElementById('result');
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+  const VERDICT = {
+    original: ['원본이 맞아요', 'Recamly Stamp로 찍은 뒤 바뀌지 않은 원본 파일이에요.'],
+    modified: ['수정된 파일이에요', '촬영 뒤에 내용이 바뀌었어요. 아래 촬영 정보는 믿을 수 없어요.'],
+    unknown: ['일부만 확인됐어요', '파일은 바뀌지 않았지만, 찍은 앱이나 폰을 끝까지 확인하지 못했어요. 아래 항목을 보세요.'],
+    none: ['진본 증명서가 없어요', 'Recamly Stamp 원본이 아니거나, 압축·편집되면서 증명서가 지워진 파일이에요.'],
+  };
+  const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', TrustedEnvironment: '보안 영역 (TEE)', Software: '소프트웨어 (약함)' };
+
+  async function show(file) {
+    out.innerHTML = '<p class="busy">확인하는 중…</p>';
+    try {
+      const r = await verify(await file.arrayBuffer());
+      render(file, r);
+    } catch (e) {
+      out.innerHTML = `<div class="verdict none"><h2>확인하지 못했어요</h2><p>${esc(e.message || e)}</p></div>`;
+    }
+  }
+
+  function render(file, r) {
+    const [title, body] = VERDICT[r.verdict];
+    let html = `<div class="verdict ${r.verdict}"><h2>${title}</h2><p>${body}</p></div>`;
+    if (r.checks.length) {
+      html += '<div class="card">' + r.checks.map((c) => {
+        const [cls, sym] = c.ok === true ? ['yes', '✓'] : c.ok === false ? ['no', '✕'] : ['maybe', '!'];
+        return `<div class="check"><span class="mark ${cls}">${sym}</span><span>${esc(c.text)}</span></div>`;
+      }).join('') + '</div>';
+    }
+    const i = r.claim?.info;
+    if (i && r.verdict !== 'modified') {
+      const rows = [
+        ['파일', file.name],
+        ['종류', r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진'],
+        ['촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`],
+      ];
+      if (r.timestamp?.ok) {
+        const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
+        rows.push(['공공 시간 증명', `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`]);
+      }
+      if (i.latitude != null) {
+        const ll = `${i.latitude.toFixed(6)}, ${i.longitude.toFixed(6)}`;
+        const acc = i.accuracyMeters != null ? ` (오차 약 ${Math.round(i.accuracyMeters)}m)` : '';
+        rows.push(['좌표', `<a href="https://www.google.com/maps?q=${ll}" target="_blank" rel="noopener">${ll}</a>${acc}`, true]);
+      } else {
+        rows.push(['좌표', '없음 (위치를 못 잡은 채로 찍음)']);
+      }
+      if (i.address) rows.push(['주소', i.address + (i.addressChosen ? ' — GPS 오차 안의 후보 중 촬영자가 고름' : ' — GPS로 자동')]);
+      rows.push(['기기', r.claim.device]);
+      if (r.level) rows.push(['서명 보관', LEVEL[r.level] || r.level]);
+      rows.push(['앱 버전', r.claim.appVersion]);
+      html += '<div class="card"><table>' + rows.map(([k, v, raw]) => `<tr><th>${k}</th><td>${raw ? v : esc(v)}</td></tr>`).join('') + '</table></div>';
+    }
+    out.innerHTML = html;
+    window.lastResult = r;
+  }
+
+  input.addEventListener('change', () => input.files[0] && show(input.files[0]));
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    if (e.dataTransfer.files[0]) show(e.dataTransfer.files[0]);
+  });
+  window.verifyFile = show; // 시험용
+</script>
+</body>
+</html>
