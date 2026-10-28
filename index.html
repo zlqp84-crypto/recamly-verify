@@ -106,8 +106,14 @@
     }
   }
 
+  // 전후 비교 사진: 원본 2장(시공 전·후)을 나란히 붙여 앱이 만든 사진. 증명서에 원본 2장의 지문이 있다.
+  const COMPARE_VERDICT = {
+    original: ['전후 비교 사진이 맞아요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
+  };
+
   function render(file, r) {
-    const [title, body] = VERDICT[r.verdict];
+    const cmp = r.claim?.kind === 'compare' ? r.claim.info?.compare : null;
+    const [title, body] = (cmp && COMPARE_VERDICT[r.verdict]) || VERDICT[r.verdict];
     let html = `<div class="verdict ${r.verdict}"><h2>${title}</h2><p>${body}</p></div>`;
     if (r.checks.length) {
       html += '<div class="card">' + r.checks.map((c) => {
@@ -119,9 +125,17 @@
     if (i && r.verdict !== 'modified') {
       const rows = [
         ['파일', file.name],
-        ['종류', r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진'],
-        ['촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`],
+        ['종류', cmp ? '전후 비교 사진 (원본 2장을 나란히 붙임)' : r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진'],
+        [cmp ? '시공 후 촬영' : '촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`],
       ];
+      if (cmp) {
+        for (const [label, s] of [['시공 전 원본', cmp.before], ['시공 후 원본', cmp.after]]) {
+          if (!s) continue;
+          const parts = [s.local, s.memo, s.name].filter(Boolean).map(esc).join(' · ');
+          const hash = s.sha256 ? `<br><code class="hash">${esc(s.sha256)}</code>` : '';
+          rows.push([label, parts + hash, true]);
+        }
+      }
       if (i.site) rows.push(['현장', i.site]);
       if (i.memo) rows.push(['메모', i.memo]);
       if (r.timestamp?.ok) {
