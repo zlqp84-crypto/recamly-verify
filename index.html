@@ -53,6 +53,7 @@
   th { width: 34%; color: var(--dim); font-weight: 500; padding-right: 10px; }
   td { word-break: break-all; }
   a { color: inherit; }
+  .hash { font: 12px/1.4 ui-monospace, Consolas, monospace; color: var(--dim); }
   .busy { color: var(--dim); }
   footer { color: var(--dim); font-size: 13px; margin-top: 28px; }
 </style>
@@ -121,6 +122,8 @@
         ['종류', r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진'],
         ['촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`],
       ];
+      if (i.site) rows.push(['현장', i.site]);
+      if (i.memo) rows.push(['메모', i.memo]);
       if (r.timestamp?.ok) {
         const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
         rows.push(['공공 시간 증명', `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`]);
@@ -136,6 +139,8 @@
       rows.push(['기기', r.claim.device]);
       if (r.level) rows.push(['서명 보관', LEVEL[r.level] || r.level]);
       rows.push(['앱 버전', r.claim.appVersion]);
+      // PDF 보고서의 "파일 지문"과 같은 값 (원본 파일의 SHA-256).
+      rows.push(['파일 지문', `<code class="hash">${esc(r.claim.sha256)}</code>`, true]);
       html += '<div class="card"><table>' + rows.map(([k, v, raw]) => `<tr><th>${k}</th><td>${raw ? v : esc(v)}</td></tr>`).join('') + '</table></div>';
     }
     out.innerHTML = html;
