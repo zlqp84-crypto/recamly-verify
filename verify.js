@@ -338,7 +338,7 @@ export function describe(r, fileName, lang = 'ko') {
     verdict: r.verdict,
     title,
     body,
-    checks: r.checks.map(({ ok, text }) => ({ ok, text })),
+    checks: r.checks.map(({ id, ok, text }) => ({ id, ok, text })),
     rows,
   };
 }
