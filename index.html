@@ -80,7 +80,7 @@
 </main>
 
 <script type="module">
-  import { verify, fmtTime } from './verify.js';
+  import { verify, describe } from './verify.js';
 
   const drop = document.getElementById('drop');
   const input = document.getElementById('file');
@@ -88,77 +88,36 @@
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-  const VERDICT = {
-    original: ['원본이 맞아요', 'Recamly Stamp로 찍은 뒤 바뀌지 않은 원본 파일이에요.'],
-    modified: ['수정된 파일이에요', '촬영 뒤에 내용이 바뀌었어요. 아래 촬영 정보는 믿을 수 없어요.'],
-    unknown: ['일부만 확인됐어요', '파일은 바뀌지 않았지만, 찍은 앱이나 폰을 끝까지 확인하지 못했어요. 아래 항목을 보세요.'],
-    none: ['진본 증명서가 없어요', 'Recamly Stamp 원본이 아니거나, 압축·편집되면서 증명서가 지워진 파일이에요.'],
-  };
-  const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', TrustedEnvironment: '보안 영역 (TEE)', Software: '소프트웨어 (약함)' };
-
   async function show(file) {
     out.innerHTML = '<p class="busy">확인하는 중…</p>';
     try {
       const r = await verify(await file.arrayBuffer());
-      render(file, r);
+      render(describe(r, file.name));
+      window.lastResult = r;
     } catch (e) {
       out.innerHTML = `<div class="verdict none"><h2>확인하지 못했어요</h2><p>${esc(e.message || e)}</p></div>`;
     }
   }
 
-  // 전후 비교 사진: 원본 2장(시공 전·후)을 나란히 붙여 앱이 만든 사진. 증명서에 원본 2장의 지문이 있다.
-  const COMPARE_VERDICT = {
-    original: ['전후 비교 사진이 맞아요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
-  };
-
-  function render(file, r) {
-    const cmp = r.claim?.kind === 'compare' ? r.claim.info?.compare : null;
-    const [title, body] = (cmp && COMPARE_VERDICT[r.verdict]) || VERDICT[r.verdict];
-    let html = `<div class="verdict ${r.verdict}"><h2>${title}</h2><p>${body}</p></div>`;
-    if (r.checks.length) {
-      html += '<div class="card">' + r.checks.map((c) => {
+  // 문구는 verify.js의 describe()에서 온다 (앱의 진본 확인 화면과 같은 글).
+  function render(d) {
+    let html = `<div class="verdict ${d.verdict}"><h2>${esc(d.title)}</h2><p>${esc(d.body)}</p></div>`;
+    if (d.checks.length) {
+      html += '<div class="card">' + d.checks.map((c) => {
         const [cls, sym] = c.ok === true ? ['yes', '✓'] : c.ok === false ? ['no', '✕'] : ['maybe', '!'];
         return `<div class="check"><span class="mark ${cls}">${sym}</span><span>${esc(c.text)}</span></div>`;
       }).join('') + '</div>';
     }
-    const i = r.claim?.info;
-    if (i && r.verdict !== 'modified') {
-      const rows = [
-        ['파일', file.name],
-        ['종류', cmp ? '전후 비교 사진 (원본 2장을 나란히 붙임)' : r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진'],
-        [cmp ? '시공 후 촬영' : '촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`],
-      ];
-      if (cmp) {
-        for (const [label, s] of [['시공 전 원본', cmp.before], ['시공 후 원본', cmp.after]]) {
-          if (!s) continue;
-          const parts = [s.local, s.memo, s.name].filter(Boolean).map(esc).join(' · ');
-          const hash = s.sha256 ? `<br><code class="hash">${esc(s.sha256)}</code>` : '';
-          rows.push([label, parts + hash, true]);
-        }
-      }
-      if (i.site) rows.push(['현장', i.site]);
-      if (i.memo) rows.push(['메모', i.memo]);
-      if (r.timestamp?.ok) {
-        const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
-        rows.push(['공공 시간 증명', `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`]);
-      }
-      if (i.latitude != null) {
-        const ll = `${i.latitude.toFixed(6)}, ${i.longitude.toFixed(6)}`;
-        const acc = i.accuracyMeters != null ? ` (오차 약 ${Math.round(i.accuracyMeters)}m)` : '';
-        rows.push(['좌표', `<a href="https://www.google.com/maps?q=${ll}" target="_blank" rel="noopener">${ll}</a>${acc}`, true]);
-      } else {
-        rows.push(['좌표', '없음 (위치를 못 잡은 채로 찍음)']);
-      }
-      if (i.address) rows.push(['주소', i.address + (i.addressChosen ? ' — GPS 오차 안의 후보 중 촬영자가 고름' : ' — GPS로 자동')]);
-      rows.push(['기기', r.claim.device]);
-      if (r.level) rows.push(['서명 보관', LEVEL[r.level] || r.level]);
-      rows.push(['앱 버전', r.claim.appVersion]);
-      // PDF 보고서의 "파일 지문"과 같은 값 (원본 파일의 SHA-256).
-      rows.push(['파일 지문', `<code class="hash">${esc(r.claim.sha256)}</code>`, true]);
-      html += '<div class="card"><table>' + rows.map(([k, v, raw]) => `<tr><th>${k}</th><td>${raw ? v : esc(v)}</td></tr>`).join('') + '</table></div>';
+    if (d.rows.length) {
+      html += '<div class="card"><table>' + d.rows.map((row) => {
+        let v = row.link
+          ? `<a href="${esc(row.link)}" target="_blank" rel="noopener">${esc(row.value)}</a>`
+          : esc(row.value);
+        if (row.hash) v += `${v ? '<br>' : ''}<code class="hash">${esc(row.hash)}</code>`;
+        return `<tr><th>${esc(row.label)}</th><td>${v}</td></tr>`;
+      }).join('') + '</table></div>';
     }
     out.innerHTML = html;
-    window.lastResult = r;
   }
 
   input.addEventListener('change', () => input.files[0] && show(input.files[0]));

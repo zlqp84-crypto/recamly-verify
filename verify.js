@@ -3,7 +3,7 @@
 //   [원본][u32 전체 길이]["free"][증명서 JSON][u32 JSON 길이]["RCMLPRF1"]
 import * as asn1js from 'https://cdn.jsdelivr.net/npm/asn1js@3.0.5/+esm';
 import * as pkijs from 'https://cdn.jsdelivr.net/npm/pkijs@3.2.4/+esm';
-import { GOOGLE_ROOTS, FREETSA_CA } from './roots.js';
+import { GOOGLE_ROOTS, FREETSA_CA, DIGICERT_G4 } from './roots.js';
 
 const MAGIC = 'RCMLPRF1';
 const PACKAGE = 'com.recamly.recamly_stamp';
@@ -118,11 +118,18 @@ async function checkTimestamp(proof, sig) {
   const matches = same(imprint, await sha256(sig));
   let trusted = false;
   try {
+    const roots = [cert(pemToDer(DIGICERT_G4)), cert(pemToDer(FREETSA_CA))];
+    // DigiCert는 루트를 다른 옛 루트가 보증한 사본으로도 넣어 보내는데, 그 사본으로
+    // 길을 찾다 막히면 확인이 실패한다. 우리가 가진 루트와 이름이 같은 인증서는 뺀다.
+    const name = (c) => c.subject.toString();
+    signed.certificates = (signed.certificates || []).filter(
+      (c) => !roots.some((r) => name(r) === name(c)),
+    );
     // data: 시간 증명을 받은 원래 데이터(서명). pkijs가 TSTInfo의 지문과 대조하고,
-    // TSA 서명과 FreeTSA 루트까지의 인증서 사슬도 확인한다.
+    // TSA 서명과 믿는 루트(DigiCert, FreeTSA)까지의 인증서 사슬도 확인한다.
     const v = await signed.verify({
       signer: 0,
-      trustedCerts: [cert(pemToDer(FREETSA_CA))],
+      trustedCerts: roots,
       checkChain: true,
       extendedMode: true,
       data: sig.slice().buffer,
@@ -229,4 +236,66 @@ export async function verify(buf) {
 
 export function fmtTime(d) {
   return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }) + ' (한국 시간)';
+}
+
+const VERDICT = {
+  original: ['원본이 맞아요', 'Recamly Stamp로 찍은 뒤 바뀌지 않은 원본 파일이에요.'],
+  modified: ['수정된 파일이에요', '촬영 뒤에 내용이 바뀌었어요. 아래 촬영 정보는 믿을 수 없어요.'],
+  unknown: ['일부만 확인됐어요', '파일은 바뀌지 않았지만, 찍은 앱이나 폰을 끝까지 확인하지 못했어요. 아래 항목을 보세요.'],
+  none: ['진본 증명서가 없어요', 'Recamly Stamp 원본이 아니거나, 압축·편집되면서 증명서가 지워진 파일이에요.'],
+};
+// 전후 비교 사진: 원본 2장(시공 전·후)을 나란히 붙여 앱이 만든 사진. 증명서에 원본 2장의 지문이 있다.
+const COMPARE_VERDICT = {
+  original: ['전후 비교 사진이 맞아요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
+};
+const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', TrustedEnvironment: '보안 영역 (TEE)', Software: '소프트웨어 (약함)' };
+
+/**
+ * verify() 결과를 사람이 읽는 글로 바꾼다. 이 페이지와 앱의 "진본 확인" 화면이
+ * 같이 써서, 둘의 문구가 늘 같다.
+ * 결과: { verdict, title, body, checks: [{ ok, text }], rows: [{ label, value, hash?, link? }] }
+ *   hash: 고정폭 글꼴로 보일 지문, link: 누르면 여는 주소(지도).
+ */
+export function describe(r, fileName) {
+  const cmp = r.claim?.kind === 'compare' ? r.claim.info?.compare : null;
+  const [title, body] = (cmp && COMPARE_VERDICT[r.verdict]) || VERDICT[r.verdict];
+  const rows = [];
+  const i = r.claim?.info;
+  if (i && r.verdict !== 'modified') {
+    const row = (label, value, extra) => rows.push({ label, value, ...extra });
+    row('파일', fileName);
+    row('종류', cmp ? '전후 비교 사진 (원본 2장을 나란히 붙임)' : r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진');
+    row(cmp ? '시공 후 촬영' : '촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`);
+    if (cmp) {
+      for (const [label, s] of [['시공 전 원본', cmp.before], ['시공 후 원본', cmp.after]]) {
+        if (s) row(label, [s.local, s.memo, s.name].filter(Boolean).join(' · '), { hash: s.sha256 || undefined });
+      }
+    }
+    if (i.site) row('현장', i.site);
+    if (i.memo) row('메모', i.memo);
+    if (r.timestamp?.ok) {
+      const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
+      row('공공 시간 증명', `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`);
+    }
+    if (i.latitude != null) {
+      const ll = `${i.latitude.toFixed(6)}, ${i.longitude.toFixed(6)}`;
+      const acc = i.accuracyMeters != null ? ` (오차 약 ${Math.round(i.accuracyMeters)}m)` : '';
+      row('좌표', ll + acc, { link: `https://www.google.com/maps?q=${ll.replace(' ', '')}` });
+    } else {
+      row('좌표', '없음 (위치를 못 잡은 채로 찍음)');
+    }
+    if (i.address) row('주소', i.address + (i.addressChosen ? ' — GPS 오차 안의 후보 중 촬영자가 고름' : ' — GPS로 자동'));
+    row('기기', r.claim.device);
+    if (r.level) row('서명 보관', LEVEL[r.level] || r.level);
+    row('앱 버전', r.claim.appVersion);
+    // PDF 보고서의 "파일 지문"과 같은 값 (원본 파일의 SHA-256).
+    row('파일 지문', '', { hash: r.claim.sha256 });
+  }
+  return {
+    verdict: r.verdict,
+    title,
+    body,
+    checks: r.checks.map(({ ok, text }) => ({ ok, text })),
+    rows,
+  };
 }
