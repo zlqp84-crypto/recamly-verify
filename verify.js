@@ -145,7 +145,8 @@ async function checkTimestamp(proof, sig) {
  * 결과: { verdict: 'original' | 'modified' | 'none' | 'unknown', checks: [...], claim, ... }
  * checks 항목: { id, ok: true|false|null(확인 못 함), text }
  */
-export async function verify(buf) {
+export async function verify(buf, lang = 'ko') {
+  const t = (ko, en) => (lang === 'en' ? en : ko);
   const found = extract(buf);
   if (!found) return { verdict: 'none', checks: [] };
   const { proof, content } = found;
@@ -155,7 +156,9 @@ export async function verify(buf) {
 
   // 1. 파일이 바뀌지 않았나
   const hashOk = hex(await sha256(content)) === claim.sha256;
-  add('hash', hashOk, hashOk ? '파일이 촬영 뒤 한 글자도 바뀌지 않았어요.' : '파일 내용이 촬영 때와 달라요.');
+  add('hash', hashOk, hashOk
+    ? t('파일이 촬영 뒤 한 글자도 바뀌지 않았어요.', 'Not a single byte has changed since capture.')
+    : t('파일 내용이 촬영 때와 달라요.', 'The file content differs from capture.'));
 
   // 2. 서명 + 키 증명서 사슬
   const certs = proof.chain.map((c) => cert(b64(c)));
@@ -170,7 +173,9 @@ export async function verify(buf) {
       sigOk = false;
     }
   }
-  add('sig', sigOk, sigOk ? '촬영 정보와 파일 지문에 폰 보안 칩의 서명이 맞아요.' : '서명이 맞지 않아요.');
+  add('sig', sigOk, sigOk
+    ? t('촬영 정보와 파일 지문에 폰 보안 칩의 서명이 맞아요.', "The phone security chip's signature matches the capture info and file fingerprint.")
+    : t('서명이 맞지 않아요.', 'The signature does not match.'));
 
   let chainOk = certs.length > 1;
   for (let i = 0; chainOk && i < certs.length - 1; i++) {
@@ -184,7 +189,9 @@ export async function verify(buf) {
   const rootKeys = GOOGLE_ROOTS.map((p) => hex(new Uint8Array(cert(pemToDer(p)).subjectPublicKeyInfo.toSchema().toBER(false))));
   const googleRoot = !!top && rootKeys.includes(hex(new Uint8Array(top.subjectPublicKeyInfo.toSchema().toBER(false))));
   const chainTrusted = chainOk && googleRoot;
-  add('chain', chainTrusted, chainTrusted ? '서명 키가 구글이 보증하는 폰 보안 칩 안에서 만들어졌어요.' : '서명 키를 구글 보안 칩 증명으로 확인할 수 없어요.');
+  add('chain', chainTrusted, chainTrusted
+    ? t('서명 키가 구글이 보증하는 폰 보안 칩 안에서 만들어졌어요.', 'The signing key was created inside a phone security chip certified by Google.')
+    : t('서명 키를 구글 보안 칩 증명으로 확인할 수 없어요.', "The signing key can't be confirmed by Google's security chip attestation."));
 
   const kd = certs.length ? keyDescription(certs[0]) : null;
   const pkgOk = !!kd?.app?.packages.includes(PACKAGE) && kd.challenge === CHALLENGE;
@@ -193,23 +200,23 @@ export async function verify(buf) {
     'app',
     pkgOk && !!signer,
     !pkgOk
-      ? 'Recamly Stamp 앱이 만든 키가 아니에요.'
+      ? t('Recamly Stamp 앱이 만든 키가 아니에요.', 'The key was not made by the Recamly Stamp app.')
       : signer
-        ? `Recamly Stamp 앱(${signer})이 찍었어요.`
-        : 'Recamly Stamp 이름의 앱이지만, 정식 배포본의 서명이 아니에요.',
+        ? t(`Recamly Stamp 앱(${signer})이 찍었어요.`, `Taken with the Recamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer}).`)
+        : t('Recamly Stamp 이름의 앱이지만, 정식 배포본의 서명이 아니에요.', 'An app named Recamly Stamp, but not signed as an official release.'),
   );
   const deviceOk = kd?.root ? kd.root.deviceLocked && kd.root.bootState === 'Verified' : null;
   add(
     'device',
     deviceOk,
     deviceOk === null
-      ? '폰 변조 여부를 확인할 수 없어요.'
+      ? t('폰 변조 여부를 확인할 수 없어요.', "Can't check whether the phone was tampered with.")
       : deviceOk
-        ? '루팅·변조되지 않은 폰에서 찍었어요.'
-        : '루팅되거나 잠금이 풀린 폰에서 찍었어요.',
+        ? t('루팅·변조되지 않은 폰에서 찍었어요.', 'Taken on a phone that is not rooted or tampered with.')
+        : t('루팅되거나 잠금이 풀린 폰에서 찍었어요.', 'Taken on a rooted or unlocked phone.'),
   );
   const rev = await revoked(certs);
-  if (rev === true) add('revoked', false, '구글이 이 폰의 보안 칩 인증서를 폐기했어요.');
+  if (rev === true) add('revoked', false, t('구글이 이 폰의 보안 칩 인증서를 폐기했어요.', "Google has revoked this phone's security chip certificate."));
 
   // 3. 공공 시간 증명
   const ts = await checkTimestamp(proof, sig);
@@ -217,10 +224,10 @@ export async function verify(buf) {
     'time',
     ts ? ts.ok : null,
     !ts
-      ? '공공 시간 증명이 없어요 (찍을 때 인터넷이 안 됐을 수 있어요). 촬영 시각은 폰 기록만 있어요.'
+      ? t('공공 시간 증명이 없어요 (찍을 때 인터넷이 안 됐을 수 있어요). 촬영 시각은 폰 기록만 있어요.', 'No public timestamp (maybe no internet at capture). The capture time is from the phone only.')
       : ts.ok
-        ? `공공 시간 증명(${ts.by})으로 ${fmtTime(ts.time)}에 이 파일이 있었음이 확인돼요.`
-        : '공공 시간 증명이 맞지 않아요.',
+        ? t(`공공 시간 증명(${ts.by})으로 ${fmtTime(ts.time)}에 이 파일이 있었음이 확인돼요.`, `A public timestamp (${ts.by}) confirms this file existed at ${fmtTime(ts.time, 'en')}.`)
+        : t('공공 시간 증명이 맞지 않아요.', 'The public timestamp does not match.'),
   );
 
   const tampered = !hashOk || !sigOk;
@@ -234,7 +241,8 @@ export async function verify(buf) {
   };
 }
 
-export function fmtTime(d) {
+export function fmtTime(d, lang = 'ko') {
+  if (lang === 'en') return d.toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
   return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false }) + ' (한국 시간)';
 }
 
@@ -244,11 +252,21 @@ const VERDICT = {
   unknown: ['일부만 확인됐어요', '파일은 바뀌지 않았지만, 찍은 앱이나 폰을 끝까지 확인하지 못했어요. 아래 항목을 보세요.'],
   none: ['진본 증명서가 없어요', 'Recamly Stamp 원본이 아니거나, 압축·편집되면서 증명서가 지워진 파일이에요.'],
 };
+const VERDICT_EN = {
+  original: ['This is the original', 'An original file, unchanged since it was taken with Recamly Stamp.'],
+  modified: ['This file was modified', 'The content changed after capture. The capture info below cannot be trusted.'],
+  unknown: ['Partly verified', 'The file is unchanged, but the app or phone could not be fully verified. See the items below.'],
+  none: ['No proof certificate', 'Not a Recamly Stamp original, or the certificate was removed by compression or editing.'],
+};
 // 전후 비교 사진: 원본 2장(시공 전·후)을 나란히 붙여 앱이 만든 사진. 증명서에 원본 2장의 지문이 있다.
 const COMPARE_VERDICT = {
   original: ['전후 비교 사진이 맞아요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
 };
+const COMPARE_VERDICT_EN = {
+  original: ['This before/after photo is genuine', 'A comparison photo made by Recamly Stamp from the two originals below, unchanged since. Each original can be verified too.'],
+};
 const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', TrustedEnvironment: '보안 영역 (TEE)', Software: '소프트웨어 (약함)' };
+const LEVEL_EN = { StrongBox: 'Dedicated security chip (StrongBox, strongest)', TrustedEnvironment: 'Secure area (TEE)', Software: 'Software (weak)' };
 
 /**
  * verify() 결과를 사람이 읽는 글로 바꾼다. 이 페이지와 앱의 "진본 확인" 화면이
@@ -256,40 +274,65 @@ const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', Trust
  * 결과: { verdict, title, body, checks: [{ ok, text }], rows: [{ label, value, hash?, link? }] }
  *   hash: 고정폭 글꼴로 보일 지문, link: 누르면 여는 주소(지도).
  */
-export function describe(r, fileName) {
+export function describe(r, fileName, lang = 'ko') {
+  const en = lang === 'en';
+  const t = (ko, e) => (en ? e : ko);
   const cmp = r.claim?.kind === 'compare' ? r.claim.info?.compare : null;
-  const [title, body] = (cmp && COMPARE_VERDICT[r.verdict]) || VERDICT[r.verdict];
+  const [title, body] = (cmp && (en ? COMPARE_VERDICT_EN : COMPARE_VERDICT)[r.verdict]) || (en ? VERDICT_EN : VERDICT)[r.verdict];
   const rows = [];
   const i = r.claim?.info;
   if (i && r.verdict !== 'modified') {
     const row = (label, value, extra) => rows.push({ label, value, ...extra });
-    row('파일', fileName);
-    row('종류', cmp ? '전후 비교 사진 (원본 2장을 나란히 붙임)' : r.claim.kind === 'video' ? '영상 (녹화 시작 시각)' : '사진');
-    row(cmp ? '시공 후 촬영' : '촬영 시각', `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? '인터넷 표준시로 맞춘 시계' : '폰 시계'}`);
+    row(t('파일', 'File'), fileName);
+    row(
+      t('종류', 'Type'),
+      cmp
+        ? t('전후 비교 사진 (원본 2장을 나란히 붙임)', 'Before/after photo (two originals side by side)')
+        : r.claim.kind === 'video'
+          ? t('영상 (녹화 시작 시각)', 'Video (recording start time)')
+          : t('사진', 'Photo'),
+    );
+    row(
+      cmp ? t('시공 후 촬영', 'After photo taken') : t('촬영 시각', 'Taken at'),
+      `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? t('인터넷 표준시로 맞춘 시계', 'clock synced to internet time') : t('폰 시계', 'phone clock')}`,
+    );
     if (cmp) {
-      for (const [label, s] of [['시공 전 원본', cmp.before], ['시공 후 원본', cmp.after]]) {
+      for (const [label, s] of [[t('시공 전 원본', 'Before original'), cmp.before], [t('시공 후 원본', 'After original'), cmp.after]]) {
         if (s) row(label, [s.local, s.memo, s.name].filter(Boolean).join(' · '), { hash: s.sha256 || undefined });
       }
     }
-    if (i.site) row('현장', i.site);
-    if (i.memo) row('메모', i.memo);
+    if (i.site) row(t('현장', 'Site'), i.site);
+    if (i.memo) row(t('메모', 'Memo'), i.memo);
     if (r.timestamp?.ok) {
       const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
-      row('공공 시간 증명', `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`);
+      row(
+        t('공공 시간 증명', 'Public timestamp'),
+        en
+          ? `${fmtTime(r.timestamp.time, 'en')} (${Math.abs(gap)} s ${gap >= 0 ? 'after' : 'before'} capture record)`
+          : `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`,
+      );
     }
     if (i.latitude != null) {
       const ll = `${i.latitude.toFixed(6)}, ${i.longitude.toFixed(6)}`;
-      const acc = i.accuracyMeters != null ? ` (오차 약 ${Math.round(i.accuracyMeters)}m)` : '';
-      row('좌표', ll + acc, { link: `https://www.google.com/maps?q=${ll.replace(' ', '')}` });
+      const acc = i.accuracyMeters != null ? t(` (오차 약 ${Math.round(i.accuracyMeters)}m)`, ` (±${Math.round(i.accuracyMeters)} m)`) : '';
+      row(t('좌표', 'Coordinates'), ll + acc, { link: `https://www.google.com/maps?q=${ll.replace(' ', '')}` });
     } else {
-      row('좌표', '없음 (위치를 못 잡은 채로 찍음)');
+      row(t('좌표', 'Coordinates'), t('없음 (위치를 못 잡은 채로 찍음)', 'None (taken without a location fix)'));
     }
-    if (i.address) row('주소', i.address + (i.addressChosen ? ' — GPS 오차 안의 후보 중 촬영자가 고름' : ' — GPS로 자동'));
-    row('기기', r.claim.device);
-    if (r.level) row('서명 보관', LEVEL[r.level] || r.level);
-    row('앱 버전', r.claim.appVersion);
+    if (i.address) {
+      row(
+        t('주소', 'Address'),
+        i.address +
+          (i.addressChosen
+            ? t(' — GPS 오차 안의 후보 중 촬영자가 고름', ' — chosen by the photographer among candidates within GPS accuracy')
+            : t(' — GPS로 자동', ' — automatic from GPS')),
+      );
+    }
+    row(t('기기', 'Device'), r.claim.device);
+    if (r.level) row(t('서명 보관', 'Key storage'), (en ? LEVEL_EN : LEVEL)[r.level] || r.level);
+    row(t('앱 버전', 'App version'), r.claim.appVersion);
     // PDF 보고서의 "파일 지문"과 같은 값 (원본 파일의 SHA-256).
-    row('파일 지문', '', { hash: r.claim.sha256 });
+    row(t('파일 지문', 'File fingerprint'), '', { hash: r.claim.sha256 });
   }
   return {
     verdict: r.verdict,
