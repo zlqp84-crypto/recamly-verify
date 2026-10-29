@@ -174,7 +174,7 @@ export async function verify(buf, lang = 'ko') {
     }
   }
   add('sig', sigOk, sigOk
-    ? t('촬영 정보와 파일 지문에 폰 보안 칩의 서명이 맞아요.', "The phone security chip's signature matches the capture info and file fingerprint.")
+    ? t('촬영 정보와 파일 지문에 폰 키 저장소(Android Keystore) 서명이 맞아요.', 'The Android Keystore signature matches the capture info and file fingerprint.')
     : t('서명이 맞지 않아요.', 'The signature does not match.'));
 
   let chainOk = certs.length > 1;
@@ -190,8 +190,8 @@ export async function verify(buf, lang = 'ko') {
   const googleRoot = !!top && rootKeys.includes(hex(new Uint8Array(top.subjectPublicKeyInfo.toSchema().toBER(false))));
   const chainTrusted = chainOk && googleRoot;
   add('chain', chainTrusted, chainTrusted
-    ? t('서명 키가 구글이 보증하는 폰 보안 칩 안에서 만들어졌어요.', 'The signing key was created inside a phone security chip certified by Google.')
-    : t('서명 키를 구글 보안 칩 증명으로 확인할 수 없어요.', "The signing key can't be confirmed by Google's security chip attestation."));
+    ? t('서명 키가 폰 키 저장소(Android Keystore) 안에서 만들어졌음이 구글 기기 인증으로 확인돼요.', "Google's device attestation confirms the signing key was created in the phone's Android Keystore.")
+    : t('서명 키를 구글 기기 인증으로 확인할 수 없어요.', "The signing key can't be confirmed by Google's device attestation."));
 
   const kd = certs.length ? keyDescription(certs[0]) : null;
   const pkgOk = !!kd?.app?.packages.includes(PACKAGE) && kd.challenge === CHALLENGE;
@@ -216,7 +216,7 @@ export async function verify(buf, lang = 'ko') {
         : t('루팅되거나 잠금이 풀린 폰에서 찍었어요.', 'Taken on a rooted or unlocked phone.'),
   );
   const rev = await revoked(certs);
-  if (rev === true) add('revoked', false, t('구글이 이 폰의 보안 칩 인증서를 폐기했어요.', "Google has revoked this phone's security chip certificate."));
+  if (rev === true) add('revoked', false, t('구글이 이 폰의 기기 인증서를 폐기했어요.', "Google has revoked this phone's device attestation certificate."));
 
   // 3. 공공 시간 증명
   const ts = await checkTimestamp(proof, sig);
@@ -224,10 +224,10 @@ export async function verify(buf, lang = 'ko') {
     'time',
     ts ? ts.ok : null,
     !ts
-      ? t('공공 시간 증명이 없어요 (찍을 때 인터넷이 안 됐을 수 있어요). 촬영 시각은 폰 기록만 있어요.', 'No public timestamp (maybe no internet at capture). The capture time is from the phone only.')
+      ? t('외부 타임스탬프가 없어요 (찍을 때 인터넷이 안 됐을 수 있어요). 촬영 시각은 폰 기록만 있어요.', 'No external timestamp (maybe no internet at capture). The capture time is from the phone only.')
       : ts.ok
-        ? t(`공공 시간 증명(${ts.by})으로 ${fmtTime(ts.time)}에 이 파일이 있었음이 확인돼요.`, `A public timestamp (${ts.by}) confirms this file existed at ${fmtTime(ts.time, 'en')}.`)
-        : t('공공 시간 증명이 맞지 않아요.', 'The public timestamp does not match.'),
+        ? t(`외부 타임스탬프(${ts.by})로 ${fmtTime(ts.time)}에 이 파일이 있었음이 확인돼요.`, `An external timestamp (${ts.by}) confirms this file existed at ${fmtTime(ts.time, 'en')}.`)
+        : t('외부 타임스탬프가 맞지 않아요.', 'The external timestamp does not match.'),
   );
 
   const tampered = !hashOk || !sigOk;
@@ -247,29 +247,29 @@ export function fmtTime(d, lang = 'ko') {
 }
 
 const VERDICT = {
-  original: ['원본이 맞아요', 'Recamly Stamp로 찍은 뒤 바뀌지 않은 원본 파일이에요.'],
+  original: ['서명 후 변경되지 않았어요', 'Recamly Stamp로 찍은 뒤 파일 내용이 바뀌지 않았어요.'],
   modified: ['수정된 파일이에요', '촬영 뒤에 내용이 바뀌었어요. 아래 촬영 정보는 믿을 수 없어요.'],
   unknown: ['일부만 확인됐어요', '파일은 바뀌지 않았지만, 찍은 앱이나 폰을 끝까지 확인하지 못했어요. 아래 항목을 보세요.'],
-  none: ['진본 증명서가 없어요', 'Recamly Stamp 원본이 아니거나, 압축·편집되면서 증명서가 지워진 파일이에요.'],
+  none: ['서명 정보가 없어요', 'Recamly Stamp로 찍은 파일이 아니거나, 압축·편집되면서 서명 정보가 지워진 파일이에요.'],
 };
 const VERDICT_EN = {
-  original: ['This is the original', 'An original file, unchanged since it was taken with Recamly Stamp.'],
+  original: ['No changes since signing', 'The file content has not changed since it was taken with Recamly Stamp.'],
   modified: ['This file was modified', 'The content changed after capture. The capture info below cannot be trusted.'],
   unknown: ['Partly verified', 'The file is unchanged, but the app or phone could not be fully verified. See the items below.'],
-  none: ['No proof certificate', 'Not a Recamly Stamp original, or the certificate was removed by compression or editing.'],
+  none: ['No signature data', 'Not taken with Recamly Stamp, or the signature data was removed by compression or editing.'],
 };
 // 전후 비교 사진: 원본 2장(시공 전·후)을 나란히 붙여 앱이 만든 사진. 증명서에 원본 2장의 지문이 있다.
 const COMPARE_VERDICT = {
-  original: ['전후 비교 사진이 맞아요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
+  original: ['전후 비교 사진이 서명 후 변경되지 않았어요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
 };
 const COMPARE_VERDICT_EN = {
-  original: ['This before/after photo is genuine', 'A comparison photo made by Recamly Stamp from the two originals below, unchanged since. Each original can be verified too.'],
+  original: ['No changes to this before/after photo since signing', 'A comparison photo made by Recamly Stamp from the two originals below, unchanged since. Each original can be checked too.'],
 };
 const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', TrustedEnvironment: '보안 영역 (TEE)', Software: '소프트웨어 (약함)' };
 const LEVEL_EN = { StrongBox: 'Dedicated security chip (StrongBox, strongest)', TrustedEnvironment: 'Secure area (TEE)', Software: 'Software (weak)' };
 
 /**
- * verify() 결과를 사람이 읽는 글로 바꾼다. 이 페이지와 앱의 "진본 확인" 화면이
+ * verify() 결과를 사람이 읽는 글로 바꾼다. 이 페이지와 앱의 "변경 여부 확인" 화면이
  * 같이 써서, 둘의 문구가 늘 같다.
  * 결과: { verdict, title, body, checks: [{ ok, text }], rows: [{ label, value, hash?, link? }] }
  *   hash: 고정폭 글꼴로 보일 지문, link: 누르면 여는 주소(지도).
@@ -306,7 +306,7 @@ export function describe(r, fileName, lang = 'ko') {
     if (r.timestamp?.ok) {
       const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
       row(
-        t('공공 시간 증명', 'Public timestamp'),
+        t('외부 타임스탬프', 'External timestamp'),
         en
           ? `${fmtTime(r.timestamp.time, 'en')} (${Math.abs(gap)} s ${gap >= 0 ? 'after' : 'before'} capture record)`
           : `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`,

@@ -45,7 +45,7 @@
     <table>
       <tr><th>주소 찾기</th><td>찍은 위치의 좌표를 주소로 바꾸려고 폰의 주소 찾기 기능(구글)과, 한국에서는 국토교통부 브이월드(api.vworld.kr)에 좌표를 보내요. 이름·사진은 보내지 않아요.</td></tr>
       <tr><th>인터넷 시간 확인</th><td>정확한 시각을 새기려고 인터넷 표준시 서버에 시간을 물어봐요. 개인 정보는 보내지 않아요.</td></tr>
-      <tr><th>공공 시간 증명</th><td>촬영 직후 DigiCert(timestamp.digicert.com) 또는 FreeTSA(freetsa.org)에 서명의 지문(SHA-256, 64자리 숫자)만 보내 시각 증명을 받아요. 사진·위치·이름은 보내지 않아요.</td></tr>
+      <tr><th>외부 타임스탬프</th><td>촬영 직후 DigiCert(timestamp.digicert.com) 또는 FreeTSA(freetsa.org)에 서명의 지문(SHA-256, 64자리 숫자)만 보내 타임스탬프를 받아요. 사진·위치·이름은 보내지 않아요.</td></tr>
       <tr><th>진본 확인</th><td>앱 안과 확인 페이지에서 폰·브라우저 안에서만 계산해요. 파일은 어디에도 올라가지 않아요. 구글 인증서 폐기 목록을 확인할 수 있어요.</td></tr>
     </table>
 
@@ -70,7 +70,7 @@
     <p class="dim">Effective: 2026-10-30</p>
     <p><strong>Summary.</strong> Recamly Stamp has no accounts and no servers of its own. Your photos, videos and locations stay on your phone; we do not receive or collect them.</p>
     <p><strong>On the phone.</strong> The camera and microphone are used only while shooting. Your GPS location is stamped onto the photo or video and sealed in the proof certificate at the end of the file. The app saves to your gallery and reads only files you pick for sending, reports or verification. Settings, site names and memos are stored inside the app and removed when you uninstall it.</p>
-    <p><strong>Sent to others (never to us).</strong> Coordinates are sent to your phone's address lookup (Google) and, in Korea, to VWorld (api.vworld.kr) to find the street address. The app asks an internet time server for the current time. Right after capture, only a fingerprint of the signature (a SHA-256 hash) is sent to DigiCert (timestamp.digicert.com) or FreeTSA (freetsa.org) for a public timestamp — never the photo, location or your name. Verification runs entirely on your phone or in your browser; files are not uploaded. Google's certificate revocation list may be checked.</p>
+    <p><strong>Sent to others (never to us).</strong> Coordinates are sent to your phone's address lookup (Google) and, in Korea, to VWorld (api.vworld.kr) to find the street address. The app asks an internet time server for the current time. Right after capture, only a fingerprint of the signature (a SHA-256 hash) is sent to DigiCert (timestamp.digicert.com) or FreeTSA (freetsa.org) for an external timestamp — never the photo, location or your name. Verification runs entirely on your phone or in your browser; files are not uploaded. Google's certificate revocation list may be checked.</p>
     <p><strong>When you share.</strong> Files you send with "Send originals", "PDF report" or "Share" go to the messenger or email app you choose, and include the capture time, location, address, site name, memo and phone model.</p>
     <p><strong>No ads, analytics or data sales.</strong> We do not use advertising or analytics tools, and we do not sell or share personal data.</p>
     <p><strong>Deletion.</strong> Delete photos and videos in your gallery; uninstalling removes all in-app data. Nothing is kept on our side.</p>
