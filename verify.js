@@ -230,8 +230,36 @@ export async function verify(buf, lang = 'ko') {
         : t('외부 타임스탬프가 맞지 않아요.', 'The external timestamp does not match.'),
   );
 
+  // 4. 촬영 기록 시각이 외부 타임스탬프와 맞는지. 사진은 찍자마자 서명·타임스탬프를
+  //    받으므로 몇 초 차이가 정상이다. 촬영 기록이 타임스탬프보다 한참 앞서면
+  //    (폰 시계나 표준시를 과거로 속인 경우) 촬영 시각을 믿을 수 없다. 반대로 촬영
+  //    기록이 타임스탬프보다 뒤면(미래 시각) 있을 수 없는 일이다.
+  //    영상은 새기기가 끝난 뒤(앱을 닫았다 켜면 다음 날일 수도) 서명해서 앞쪽만 본다.
+  //    보드판 수정본은 고친 시각을 기준으로 본다.
+  let timeSuspicious = false;
+  if (ts?.ok && claim.info) {
+    const i = claim.info;
+    const ref = claim.kind === 'revision' ? i.revision?.revisedUtcMs : i.utcMs;
+    if (typeof ref === 'number') {
+      const gap = (ts.time.getTime() - ref) / 1000;
+      const late = claim.kind !== 'video' && gap > 600;
+      const future = gap < -120;
+      if (late || future) {
+        timeSuspicious = true;
+        add(
+          'timegap',
+          false,
+          future
+            ? t(`촬영 기록 시각이 외부 타임스탬프보다 ${gapText(-gap).replace(/ (앞|뒤)$/, '')} 뒤예요. 폰 시계가 맞지 않았을 수 있어 촬영 시각을 믿을 수 없어요.`, `The capture time is ${gapTextEn(-gap).replace(/ (after|before)$/, '')} after the external timestamp. The phone clock may have been wrong, so the capture time can't be trusted.`)
+            : t(`촬영 기록 시각이 외부 타임스탬프보다 ${gapText(gap).replace(/ (앞|뒤)$/, '')} 앞서요. 시계를 과거로 맞췄을 수 있어 촬영 시각을 믿을 수 없어요.`, `The capture time is ${gapTextEn(gap).replace(/ (after|before)$/, '')} before the external timestamp. The clock may have been set back, so the capture time can't be trusted.`),
+        );
+      }
+    }
+  }
+
   const tampered = !hashOk || !sigOk;
-  const strong = chainTrusted && pkgOk && !!signer && rev !== true;
+  // 루팅·잠금 해제된 폰은 앱을 속여 위치·시각을 바꿀 수 있어서 "부분 확인"으로 둔다.
+  const strong = chainTrusted && pkgOk && !!signer && rev !== true && deviceOk !== false && !timeSuspicious;
   return {
     verdict: tampered ? 'modified' : strong ? 'original' : 'unknown',
     checks,
@@ -364,6 +392,8 @@ export function describe(r, fileName, lang = 'ko') {
         t('좌표', 'Coordinates'),
         i.locationOff
           ? t('기록 안 함 (찍은 사람이 "위치 기록 안 하기"를 켬)', 'Not recorded (the photographer turned location off)')
+          : i.locationMocked
+          ? t('넣지 않음 (찍을 때 가짜 위치 앱이 켜져 있었음)', 'Not added (a mock location app was on at capture)')
           : t('없음 (위치를 못 잡은 채로 찍음)', 'None (taken without a location fix)'),
       );
     }
