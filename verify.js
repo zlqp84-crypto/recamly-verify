@@ -331,6 +331,14 @@ export function describe(r, fileName, lang = 'ko') {
       for (const [label, from, to] of rev.changes || []) row(t('고친 칸 · ', 'Changed · ') + label, `${from || '-'} → ${to || '-'}`);
       if (rev.revisedUtcMs) row(t('고친 시각', 'Revised at'), fmtTime(new Date(rev.revisedUtcMs), lang));
     }
+    // 개인 기록 기록판: 기록 이름과 며칠째.
+    if (i.record && (i.record.name || i.record.day)) {
+      row(
+        t('기록', 'Record'),
+        [i.record.name, i.record.day ? t(`${i.record.day}일째`, `Day ${i.record.day}`) : null].filter(Boolean).join(' · ') +
+          (i.record.startDate ? t(` (시작 ${i.record.startDate})`, ` (started ${i.record.startDate})`) : ''),
+      );
+    }
     if (i.site) row(t('현장', 'Site'), i.site);
     if (i.memo) row(t('메모', 'Memo'), i.memo);
     // 공사 보드판: 사진에 새긴 표의 칸 그대로 (서명 안에 들어 있음).
@@ -352,7 +360,12 @@ export function describe(r, fileName, lang = 'ko') {
       const acc = i.accuracyMeters != null ? t(` (오차 약 ${Math.round(i.accuracyMeters)}m)`, ` (±${Math.round(i.accuracyMeters)} m)`) : '';
       row(t('좌표', 'Coordinates'), ll + acc, { link: `https://www.google.com/maps?q=${ll.replace(' ', '')}` });
     } else {
-      row(t('좌표', 'Coordinates'), t('없음 (위치를 못 잡은 채로 찍음)', 'None (taken without a location fix)'));
+      row(
+        t('좌표', 'Coordinates'),
+        i.locationOff
+          ? t('기록 안 함 (찍은 사람이 "위치 기록 안 하기"를 켬)', 'Not recorded (the photographer turned location off)')
+          : t('없음 (위치를 못 잡은 채로 찍음)', 'None (taken without a location fix)'),
+      );
     }
     if (i.address) {
       row(
