@@ -13,7 +13,10 @@ const ATTESTATION_OID = '1.3.6.1.4.1.11129.2.1.17';
 // 앱 서명 인증서의 SHA-256. 키 증명서에 "이 키를 만든 앱의 서명"으로 들어간다.
 // 플레이 스토어로 배포하면 구글 앱 서명 키가 추가된다 → 그때 여기에 넣는다.
 export const APP_SIGNERS = {
-  // 개발 PC의 디버그 키(~/.android/debug.keystore). 출시 전에 정식 서명 키로 바꾼다.
+  // 출시용 업로드 키 (C:\singo\key\recamly-upload.jks, CN=Recamly Stamp). 직접 깐 출시 빌드.
+  // 플레이 스토어에 올린 뒤 구글 "앱 서명 키"의 SHA-256도 여기에 더해야 스토어에서 받은 앱이 알아봐진다.
+  'c7a2d37bbaaf372b595b8fb2319ef6df64de2758e0ef9346beff954e43789d38': '정식 서명',
+  // 개발 PC의 디버그 키(~/.android/debug.keystore). 개발 중 찍은 시험 파일용.
   'aa3c624a11aa6714d17020b433f16a98a59239b7a413470b986970425724b6ce': '개발용 빌드',
 };
 
@@ -202,7 +205,7 @@ export async function verify(buf, lang = 'ko') {
     !pkgOk
       ? t('Recamly Stamp 앱이 만든 키가 아니에요.', 'The key was not made by the Recamly Stamp app.')
       : signer
-        ? t(`Recamly Stamp 앱(${signer})이 찍었어요.`, `Taken with the Recamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer}).`)
+        ? t(`Recamly Stamp 앱(${signer})이 찍었어요.`, `Taken with the Recamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer === '정식 서명' ? 'official signature' : signer}).`)
         : t('Recamly Stamp 이름의 앱이지만, 정식 배포본의 서명이 아니에요.', 'An app named Recamly Stamp, but not signed as an official release.'),
   );
   const deviceOk = kd?.root ? kd.root.deviceLocked && kd.root.bootState === 'Verified' : null;
