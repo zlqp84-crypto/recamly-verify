@@ -265,6 +265,13 @@ const COMPARE_VERDICT = {
 const COMPARE_VERDICT_EN = {
   original: ['No changes to this before/after photo since signing', 'A comparison photo made by Recamly Stamp from the two originals below, unchanged since. Each original can be checked too.'],
 };
+// 보드판 수정본: 원본 사진의 보드판 글자만 고친 사본. 증명서에 원본 지문과 고친 칸이 있다.
+const REVISION_VERDICT = {
+  original: ['보드판 수정본이 서명 후 변경되지 않았어요', '원본 사진의 보드판 글자만 고친 사본이에요. 원본은 따로 그대로 있고, 아래에 원본 지문과 고친 칸이 적혀 있어요. 촬영 시각·위치는 원본과 같아요.'],
+};
+const REVISION_VERDICT_EN = {
+  original: ['No changes to this board revision since signing', 'A copy of the original photo with only the board text fixed. The original still exists; its fingerprint and the changed rows are listed below. Time and place are the same as the original.'],
+};
 const LEVEL = { StrongBox: '별도 보안 칩 (StrongBox, 가장 강함)', TrustedEnvironment: '보안 영역 (TEE)', Software: '소프트웨어 (약함)' };
 const LEVEL_EN = { StrongBox: 'Dedicated security chip (StrongBox, strongest)', TrustedEnvironment: 'Secure area (TEE)', Software: 'Software (weak)' };
 
@@ -274,11 +281,27 @@ const LEVEL_EN = { StrongBox: 'Dedicated security chip (StrongBox, strongest)', 
  * 결과: { verdict, title, body, checks: [{ ok, text }], rows: [{ label, value, hash?, link? }] }
  *   hash: 고정폭 글꼴로 보일 지문, link: 누르면 여는 주소(지도).
  */
+// 외부 타임스탬프와 촬영 기록 사이 (수정본은 고친 때 받아서 몇 시간·며칠일 수 있다).
+function gapText(s) {
+  const a = Math.abs(s);
+  const n = a < 120 ? a + '초' : a < 7200 ? Math.round(a / 60) + '분' : a < 172800 ? Math.round(a / 3600) + '시간' : Math.round(a / 86400) + '일';
+  return n + (s >= 0 ? ' 뒤' : ' 앞');
+}
+function gapTextEn(s) {
+  const a = Math.abs(s);
+  const n = a < 120 ? a + ' s' : a < 7200 ? Math.round(a / 60) + ' min' : a < 172800 ? Math.round(a / 3600) + ' h' : Math.round(a / 86400) + ' days';
+  return n + (s >= 0 ? ' after' : ' before');
+}
+
 export function describe(r, fileName, lang = 'ko') {
   const en = lang === 'en';
   const t = (ko, e) => (en ? e : ko);
   const cmp = r.claim?.kind === 'compare' ? r.claim.info?.compare : null;
-  const [title, body] = (cmp && (en ? COMPARE_VERDICT_EN : COMPARE_VERDICT)[r.verdict]) || (en ? VERDICT_EN : VERDICT)[r.verdict];
+  const rev = r.claim?.kind === 'revision' ? r.claim.info?.revision : null;
+  const [title, body] =
+    (cmp && (en ? COMPARE_VERDICT_EN : COMPARE_VERDICT)[r.verdict]) ||
+    (rev && (en ? REVISION_VERDICT_EN : REVISION_VERDICT)[r.verdict]) ||
+    (en ? VERDICT_EN : VERDICT)[r.verdict];
   const rows = [];
   const i = r.claim?.info;
   if (i && r.verdict !== 'modified') {
@@ -288,7 +311,9 @@ export function describe(r, fileName, lang = 'ko') {
       t('종류', 'Type'),
       cmp
         ? t('전후 비교 사진 (원본 2장을 나란히 붙임)', 'Before/after photo (two originals side by side)')
-        : r.claim.kind === 'video'
+        : rev
+          ? t('보드판 수정본 (원본 사진의 보드판 글자만 고침)', 'Board revision (only the board text of the original was fixed)')
+          : r.claim.kind === 'video'
           ? t('영상 (녹화 시작 시각)', 'Video (recording start time)')
           : t('사진', 'Photo'),
     );
@@ -300,6 +325,11 @@ export function describe(r, fileName, lang = 'ko') {
       for (const [label, s] of [[t('시공 전 원본', 'Before original'), cmp.before], [t('시공 후 원본', 'After original'), cmp.after]]) {
         if (s) row(label, [s.local, s.memo, s.name].filter(Boolean).join(' · '), { hash: s.sha256 || undefined });
       }
+    }
+    if (rev) {
+      if (rev.of) row(t('원본 파일', 'Original file'), rev.of.name || '-', { hash: rev.of.sha256 || undefined });
+      for (const [label, from, to] of rev.changes || []) row(t('고친 칸 · ', 'Changed · ') + label, `${from || '-'} → ${to || '-'}`);
+      if (rev.revisedUtcMs) row(t('고친 시각', 'Revised at'), fmtTime(new Date(rev.revisedUtcMs), lang));
     }
     if (i.site) row(t('현장', 'Site'), i.site);
     if (i.memo) row(t('메모', 'Memo'), i.memo);
@@ -313,8 +343,8 @@ export function describe(r, fileName, lang = 'ko') {
       row(
         t('외부 타임스탬프', 'External timestamp'),
         en
-          ? `${fmtTime(r.timestamp.time, 'en')} (${Math.abs(gap)} s ${gap >= 0 ? 'after' : 'before'} capture record)`
-          : `${fmtTime(r.timestamp.time)} (촬영 기록 ${gap >= 0 ? gap + '초 뒤' : -gap + '초 앞'})`,
+          ? `${fmtTime(r.timestamp.time, 'en')} (${gapTextEn(gap)} capture record)`
+          : `${fmtTime(r.timestamp.time)} (촬영 기록 ${gapText(gap)})`,
       );
     }
     if (i.latitude != null) {
