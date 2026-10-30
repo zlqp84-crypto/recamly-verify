@@ -303,6 +303,11 @@ export function describe(r, fileName, lang = 'ko') {
     }
     if (i.site) row(t('현장', 'Site'), i.site);
     if (i.memo) row(t('메모', 'Memo'), i.memo);
+    // 공사 보드판: 사진에 새긴 표의 칸 그대로 (서명 안에 들어 있음).
+    if (i.board) {
+      if (i.board.phase) row(t('보드판 단계', 'Board stage'), i.board.phase);
+      for (const [label, value] of i.board.rows || []) row(t('보드판 · ', 'Board · ') + label, value);
+    }
     if (r.timestamp?.ok) {
       const gap = Math.round((r.timestamp.time.getTime() - i.utcMs) / 1000);
       row(
