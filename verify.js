@@ -390,7 +390,16 @@ export function describe(r, fileName, lang = 'ko') {
       const ll = `${i.latitude.toFixed(6)}, ${i.longitude.toFixed(6)}`;
       const acc = i.accuracyMeters != null ? t(` (오차 약 ${Math.round(i.accuracyMeters)}m)`, ` (±${Math.round(i.accuracyMeters)} m)`) : '';
       row(t('좌표', 'Coordinates'), ll + acc, { link: `https://www.google.com/maps?q=${ll.replace(' ', '')}` });
-    } else {
+    }
+    if (i.heading != null) {
+      const ko = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'];
+      const en = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const k = Math.floor(((i.heading % 360) + 22.5) / 45) % 8;
+      const base = i.headingTrueNorth === false ? t('자기 북쪽 기준', 'magnetic north') : t('진북 기준', 'true north');
+      const acc = i.headingAccuracy > 0 ? t(`, 오차 약 ${i.headingAccuracy}°`, `, ±${i.headingAccuracy}°`) : '';
+      row(t('촬영 방향', 'Facing'), `${t(ko[k], en[k])} ${i.heading}° (${base}${acc})`);
+    }
+    if (i.latitude == null) {
       row(
         t('좌표', 'Coordinates'),
         i.locationOff

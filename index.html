@@ -55,6 +55,8 @@
   a { color: inherit; }
   .hash { font: 12px/1.4 ui-monospace, Consolas, monospace; color: var(--dim); }
   .busy { color: var(--dim); }
+  .qrnote { background: var(--card); border: 2px solid var(--accent); border-radius: 16px; padding: 14px 16px; margin: 0 0 18px; }
+  .qrnote strong { display: block; margin-bottom: 4px; }
   footer { color: var(--dim); font-size: 13px; margin-top: 28px; }
 </style>
 </head>
@@ -62,6 +64,14 @@
 <main>
   <h1>Recamly 변경 여부 확인</h1>
   <p class="sub">Recamly Stamp로 찍은 사진·영상이 찍은 뒤 바뀌었는지 확인해요.</p>
+
+  <!-- 사진·사진대지 속 QR 코드(주소 끝 ?qr)로 들어왔을 때만 보인다. -->
+  <div id="qrnote" class="qrnote" hidden>
+    <strong>사진 속 QR 코드로 오셨네요</strong>
+    사진을 보낸 사람에게 <b>원본 파일</b>을 받아 아래에 올려 주세요.
+    메신저에서 "사진"으로 받으면 압축돼서 확인이 안 돼요. "파일로 보내기"로 받은 원본이어야 해요.
+    <br><span lang="en">Came from the QR code? Ask the sender for the original file (sent as a file, not as a compressed photo) and upload it below.</span>
+  </div>
 
   <label id="drop">
     <strong>파일을 여기에 끌어다 놓거나 눌러서 고르세요</strong>
@@ -85,6 +95,7 @@
   const drop = document.getElementById('drop');
   const input = document.getElementById('file');
   const out = document.getElementById('result');
+  if (new URLSearchParams(location.search).has('qr')) document.getElementById('qrnote').hidden = false;
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
