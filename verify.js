@@ -1,8 +1,8 @@
 // Recamly Stamp 진본 확인. 파일은 서버로 보내지 않고 이 브라우저 안에서만 계산한다.
 // 앱 쪽 봉인 방식: android/.../Proof.kt
 //   [원본][u32 전체 길이]["free"][증명서 JSON][u32 JSON 길이]["RCMLPRF1"]
-import * as asn1js from 'https://cdn.jsdelivr.net/npm/asn1js@3.0.5/+esm';
-import * as pkijs from 'https://cdn.jsdelivr.net/npm/pkijs@3.2.4/+esm';
+import * as asn1js from './lib/asn1js.js';
+import * as pkijs from './lib/pkijs.js';
 import { GOOGLE_ROOTS, FREETSA_CA, DIGICERT_G4 } from './roots.js';
 
 const MAGIC = 'RCMLPRF1';
@@ -17,8 +17,11 @@ export const APP_SIGNERS = {
   // 플레이 스토어에 올린 뒤 구글 "앱 서명 키"의 SHA-256도 여기에 더해야 스토어에서 받은 앱이 알아봐진다.
   'c7a2d37bbaaf372b595b8fb2319ef6df64de2758e0ef9346beff954e43789d38': '정식 서명',
   // 개발 PC의 디버그 키(~/.android/debug.keystore). 개발 중 찍은 시험 파일용.
+  // 디버그 키는 암호가 누구나 아는 값이라 새면 가짜 앱을 만들 수 있다 → "부분 확인"까지만.
   'aa3c624a11aa6714d17020b433f16a98a59239b7a413470b986970425724b6ce': '개발용 빌드',
 };
+// "원본"으로 인정하는 서명 (정식 배포본만). 나머지 APP_SIGNERS는 이름만 보여 준다.
+const OFFICIAL = new Set(['정식 서명']);
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -199,13 +202,16 @@ export async function verify(buf, lang = 'ko') {
   const kd = certs.length ? keyDescription(certs[0]) : null;
   const pkgOk = !!kd?.app?.packages.includes(PACKAGE) && kd.challenge === CHALLENGE;
   const signer = kd?.app?.digests.map((d) => APP_SIGNERS[d]).find(Boolean) || null;
+  const official = pkgOk && OFFICIAL.has(signer);
   add(
     'app',
-    pkgOk && !!signer,
+    official ? true : pkgOk && signer ? null : false,
     !pkgOk
       ? t('Recamly Stamp 앱이 만든 키가 아니에요.', 'The key was not made by the Recamly Stamp app.')
       : signer
-        ? t(`Recamly Stamp 앱(${signer})이 찍었어요.`, `Taken with the Recamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer === '정식 서명' ? 'official signature' : signer}).`)
+        ? official
+          ? t(`Recamly Stamp 앱(${signer})이 찍었어요.`, 'Taken with the Recamly Stamp app (official signature).')
+          : t(`Recamly Stamp 앱(${signer})이 찍었어요. 정식 배포본이 아니라서 촬영 정보를 끝까지 믿을 수는 없어요.`, `Taken with the Recamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer}). Not an official release, so the capture info can't be fully trusted.`)
         : t('Recamly Stamp 이름의 앱이지만, 정식 배포본의 서명이 아니에요.', 'An app named Recamly Stamp, but not signed as an official release.'),
   );
   const deviceOk = kd?.root ? kd.root.deviceLocked && kd.root.bootState === 'Verified' : null;
@@ -262,7 +268,7 @@ export async function verify(buf, lang = 'ko') {
 
   const tampered = !hashOk || !sigOk;
   // 루팅·잠금 해제된 폰은 앱을 속여 위치·시각을 바꿀 수 있어서 "부분 확인"으로 둔다.
-  const strong = chainTrusted && pkgOk && !!signer && rev !== true && deviceOk !== false && !timeSuspicious;
+  const strong = chainTrusted && official && rev !== true && deviceOk !== false && !timeSuspicious;
   return {
     verdict: tampered ? 'modified' : strong ? 'original' : 'unknown',
     checks,
