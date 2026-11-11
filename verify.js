@@ -105,10 +105,16 @@ function keyDescription(leaf) {
   return { level, challenge, app, root };
 }
 
+// 여러 파일을 확인할 때(사진대지) 매번 받지 않도록 한 번 받은 것을 같이 쓴다.
+let statusList = null;
 async function revoked(certs) {
   try {
-    const r = await fetch('https://android.googleapis.com/attestation/status', { cache: 'no-store' });
-    const list = (await r.json()).entries || {};
+    statusList ??= fetch('https://android.googleapis.com/attestation/status', { cache: 'no-store' })
+      .then((r) => r.json())
+      .catch(() => null);
+    const got = await statusList;
+    if (!got) throw new Error('no list');
+    const list = got.entries || {};
     return certs.some((c) => list[hex(new Uint8Array(c.serialNumber.valueBlock.valueHexView)).replace(/^0+/, '')]);
   } catch {
     return null; // 확인 못 함 (오프라인 등)
@@ -195,6 +201,14 @@ export async function verify(buf, lang = 'ko') {
   const rootKeys = GOOGLE_ROOTS.map((p) => hex(new Uint8Array(cert(pemToDer(p)).subjectPublicKeyInfo.toSchema().toBER(false))));
   const googleRoot = !!top && rootKeys.includes(hex(new Uint8Array(top.subjectPublicKeyInfo.toSchema().toBER(false))));
   const chainTrusted = chainOk && googleRoot;
+  // 서명 계산은 맞아도 그 키가 폰 키 저장소 것인지는 기기 인증이 있어야 안다 (보안 점검 5번).
+  // 아무나 자기 키를 만들어 가짜 촬영 정보에 서명할 수 있어서, 그때는 "폰 키 저장소"라고 하지 않는다.
+  if (sigOk && !chainTrusted) {
+    checks.find((c) => c.id === 'sig').text = t(
+      '파일 안에 들어 있는 키로 한 서명은 맞아요. 하지만 그 키가 폰 키 저장소에서 만들어졌는지는 확인되지 않았어요 (아무나 만든 키일 수 있어요).',
+      "The signature matches the key inside the file, but that key can't be confirmed as made in a phone's Android Keystore (anyone could have made it).",
+    );
+  }
   add('chain', chainTrusted, chainTrusted
     ? t('서명 키가 폰 키 저장소(Android Keystore) 안에서 만들어졌음이 구글 기기 인증으로 확인돼요.', "Google's device attestation confirms the signing key was created in the phone's Android Keystore.")
     : t('서명 키를 구글 기기 인증으로 확인할 수 없어요.', "The signing key can't be confirmed by Google's device attestation."));
@@ -335,10 +349,17 @@ export function describe(r, fileName, lang = 'ko') {
   const t = (ko, e) => (en ? e : ko);
   const cmp = r.claim?.kind === 'compare' ? r.claim.info?.compare : null;
   const rev = r.claim?.kind === 'revision' ? r.claim.info?.revision : null;
-  const [title, body] =
+  let [title, body] =
     (cmp && (en ? COMPARE_VERDICT_EN : COMPARE_VERDICT)[r.verdict]) ||
     (rev && (en ? REVISION_VERDICT_EN : REVISION_VERDICT)[r.verdict]) ||
     (en ? VERDICT_EN : VERDICT)[r.verdict];
+  const chainFailed = r.checks.some((c) => c.id === 'chain' && c.ok === false);
+  if (r.verdict === 'unknown' && chainFailed) {
+    body = t(
+      '파일은 서명 뒤 바뀌지 않았지만, 서명한 키가 진짜 폰에서 만들어졌는지 확인되지 않았어요. 아래 촬영 정보는 누군가 직접 적어 넣은 것일 수 있으니 믿지 마세요.',
+      "The file is unchanged since signing, but the signing key can't be confirmed as coming from a real phone. The capture info below may have been typed in by anyone, so don't rely on it.",
+    );
+  }
   const rows = [];
   const i = r.claim?.info;
   if (i && r.verdict !== 'modified') {
@@ -356,7 +377,14 @@ export function describe(r, fileName, lang = 'ko') {
     );
     row(
       cmp ? t('시공 후 촬영', 'After photo taken') : t('촬영 시각', 'Taken at'),
-      `${i.local}${i.zone ? ' ' + i.zone : ''} · ${i.timeVerified ? t('인터넷 표준시로 맞춘 시계', 'clock synced to internet time') : t('폰 시계', 'phone clock')}`,
+      `${i.local}${i.zone ? ' ' + i.zone : ''} · ${
+        !i.timeVerified
+          ? t('폰 시계', 'phone clock')
+          : r.timestamp?.ok
+            ? t('인터넷 표준시로 맞춘 시계', 'clock synced to internet time')
+            // 표준시(NTP)는 중간에서 속일 수 있어서, 외부 타임스탬프가 없으면 앱의 기록일 뿐이다 (보안 점검 7번).
+            : t('폰 기록상 인터넷 표준시 (외부 타임스탬프가 없어 확인 안 됨)', 'internet time per the phone (not confirmed: no external timestamp)')
+      }`,
     );
     if (cmp) {
       for (const [label, s] of [[t('시공 전 원본', 'Before original'), cmp.before], [t('시공 후 원본', 'After original'), cmp.after]]) {
