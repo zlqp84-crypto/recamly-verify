@@ -1,0 +1,37 @@
+# 구글 기기 인증서 폐기 목록을 하루 한 번 받아 이 저장소(확인 페이지)에 둔다 (보안 점검 4번).
+# 구글 주소(android.googleapis.com/attestation/status)는 다른 웹 페이지에서 읽는 것을 막아 두어서
+# (CORS), 확인 페이지와 앱은 여기 올려 둔 attestation_status.json을 대신 읽는다 (verify.js).
+# 목록이 바뀐 날에만 커밋한다. 원본: recamlystamp 저장소 web/verify/.github/workflows.
+name: 기기 인증서 폐기 목록 받기
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 매일 한국 시간 12:17
+  workflow_dispatch: # 손으로 돌리기
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 구글 목록 받기
+        run: |
+          curl -fsS --max-time 60 https://android.googleapis.com/attestation/status -o new.json
+          # 모양이 이상하면(빈 목록·오류 페이지) 여기서 멈춘다 → 예전 목록이 그대로 남는다.
+          jq -e '(.entries | type == "object") and (.entries | length > 100)' new.json > /dev/null
+          jq -S -c . new.json > attestation_status.json
+          rm new.json
+      - name: 바뀌었으면 올리기
+        run: |
+          git add attestation_status.json
+          if git diff --cached --quiet; then
+            echo "목록이 그대로예요"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898273+github-actions[bot]@users.noreply.github.com'
+          git commit -m '기기 인증서 폐기 목록 갱신'
+          git push
