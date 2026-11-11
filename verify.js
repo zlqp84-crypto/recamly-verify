@@ -105,13 +105,31 @@ function keyDescription(leaf) {
   return { level, challenge, app, root };
 }
 
+// 구글 기기 인증서 폐기 목록 (보안 점검 4번). 구글 주소는 브라우저·앱 웹뷰에서 읽을 수 없어서(CORS)
+// 확인 페이지 저장소가 하루 한 번 받아 두는 사본(.github/workflows/attestation-status.yml)을 먼저 읽는다.
+// 구글 주소는 막혀 있지 않은 곳(시험용 node 등)을 위한 예비.
+const STATUS_URLS = [
+  'https://zlqp84-crypto.github.io/recamly-verify/attestation_status.json',
+  'https://android.googleapis.com/attestation/status',
+];
 // 여러 파일을 확인할 때(사진대지) 매번 받지 않도록 한 번 받은 것을 같이 쓴다.
 let statusList = null;
+async function loadStatus() {
+  for (const url of STATUS_URLS) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (j && typeof j.entries === 'object') return j;
+    } catch {
+      // 다음 주소
+    }
+  }
+  return null;
+}
 async function revoked(certs) {
   try {
-    statusList ??= fetch('https://android.googleapis.com/attestation/status', { cache: 'no-store' })
-      .then((r) => r.json())
-      .catch(() => null);
+    statusList ??= loadStatus();
     const got = await statusList;
     if (!got) throw new Error('no list');
     const list = got.entries || {};
