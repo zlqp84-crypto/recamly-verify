@@ -16,7 +16,7 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 구글 목록 받기
         run: |
           curl -fsS --max-time 60 https://android.googleapis.com/attestation/status -o new.json
