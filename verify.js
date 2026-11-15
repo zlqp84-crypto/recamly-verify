@@ -1,4 +1,4 @@
-// Recamly Stamp 진본 확인. 파일은 서버로 보내지 않고 이 브라우저 안에서만 계산한다.
+// ReCamly Stamp 진본 확인. 파일은 서버로 보내지 않고 이 브라우저 안에서만 계산한다.
 // 앱 쪽 봉인 방식: android/.../Proof.kt
 //   [원본][u32 전체 길이]["free"][증명서 JSON][u32 JSON 길이]["RCMLPRF1"]
 import * as asn1js from './lib/asn1js.js';
@@ -239,12 +239,12 @@ export async function verify(buf, lang = 'ko') {
     'app',
     official ? true : pkgOk && signer ? null : false,
     !pkgOk
-      ? t('Recamly Stamp 앱이 만든 키가 아니에요.', 'The key was not made by the Recamly Stamp app.')
+      ? t('ReCamly Stamp 앱이 만든 키가 아니에요.', 'The key was not made by the ReCamly Stamp app.')
       : signer
         ? official
-          ? t(`Recamly Stamp 앱(${signer})이 찍었어요.`, 'Taken with the Recamly Stamp app (official signature).')
-          : t(`Recamly Stamp 앱(${signer})이 찍었어요. 정식 배포본이 아니라서 촬영 정보를 끝까지 믿을 수는 없어요.`, `Taken with the Recamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer}). Not an official release, so the capture info can't be fully trusted.`)
-        : t('Recamly Stamp 이름의 앱이지만, 정식 배포본의 서명이 아니에요.', 'An app named Recamly Stamp, but not signed as an official release.'),
+          ? t(`ReCamly Stamp 앱(${signer})이 찍었어요.`, 'Taken with the ReCamly Stamp app (official signature).')
+          : t(`ReCamly Stamp 앱(${signer})이 찍었어요. 정식 배포본이 아니라서 촬영 정보를 끝까지 믿을 수는 없어요.`, `Taken with the ReCamly Stamp app (${signer === '개발용 빌드' ? 'development build' : signer}). Not an official release, so the capture info can't be fully trusted.`)
+        : t('ReCamly Stamp 이름의 앱이지만, 정식 배포본의 서명이 아니에요.', 'An app named ReCamly Stamp, but not signed as an official release.'),
   );
   const deviceOk = kd?.root ? kd.root.deviceLocked && kd.root.bootState === 'Verified' : null;
   add(
@@ -316,23 +316,23 @@ export function fmtTime(d, lang = 'ko') {
 }
 
 const VERDICT = {
-  original: ['서명 후 변경되지 않았어요', 'Recamly Stamp로 찍은 뒤 파일 내용이 바뀌지 않았어요.'],
+  original: ['서명 후 변경되지 않았어요', 'ReCamly Stamp로 찍은 뒤 파일 내용이 바뀌지 않았어요.'],
   modified: ['수정된 파일이에요', '촬영 뒤에 내용이 바뀌었어요. 아래 촬영 정보는 믿을 수 없어요.'],
   unknown: ['일부만 확인됐어요', '파일은 바뀌지 않았지만, 찍은 앱이나 폰을 끝까지 확인하지 못했어요. 아래 항목을 보세요.'],
-  none: ['서명 정보가 없어요', 'Recamly Stamp로 찍은 파일이 아니거나, 압축·편집되면서 서명 정보가 지워진 파일이에요.'],
+  none: ['서명 정보가 없어요', 'ReCamly Stamp로 찍은 파일이 아니거나, 압축·편집되면서 서명 정보가 지워진 파일이에요.'],
 };
 const VERDICT_EN = {
-  original: ['No changes since signing', 'The file content has not changed since it was taken with Recamly Stamp.'],
+  original: ['No changes since signing', 'The file content has not changed since it was taken with ReCamly Stamp.'],
   modified: ['This file was modified', 'The content changed after capture. The capture info below cannot be trusted.'],
   unknown: ['Partly verified', 'The file is unchanged, but the app or phone could not be fully verified. See the items below.'],
-  none: ['No signature data', 'Not taken with Recamly Stamp, or the signature data was removed by compression or editing.'],
+  none: ['No signature data', 'Not taken with ReCamly Stamp, or the signature data was removed by compression or editing.'],
 };
 // 전후 비교 사진: 원본 2장(시공 전·후)을 나란히 붙여 앱이 만든 사진. 증명서에 원본 2장의 지문이 있다.
 const COMPARE_VERDICT = {
-  original: ['전후 비교 사진이 서명 후 변경되지 않았어요', 'Recamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
+  original: ['전후 비교 사진이 서명 후 변경되지 않았어요', 'ReCamly Stamp가 아래 원본 2장으로 만든 뒤 바뀌지 않은 비교 사진이에요. 각 원본도 이 페이지에서 확인할 수 있어요.'],
 };
 const COMPARE_VERDICT_EN = {
-  original: ['No changes to this before/after photo since signing', 'A comparison photo made by Recamly Stamp from the two originals below, unchanged since. Each original can be checked too.'],
+  original: ['No changes to this before/after photo since signing', 'A comparison photo made by ReCamly Stamp from the two originals below, unchanged since. Each original can be checked too.'],
 };
 // 보드판 수정본: 원본 사진의 보드판 글자만 고친 사본. 증명서에 원본 지문과 고친 칸이 있다.
 const REVISION_VERDICT = {
